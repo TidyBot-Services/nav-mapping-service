@@ -28,10 +28,12 @@ python main.py  # starts on port 8004
 
 ## Client SDK
 
-```python
-from client import NavMappingClient
+No `requests` dependency — the client uses Python stdlib (`urllib`). Only `numpy` is needed for map arrays.
 
-client = NavMappingClient("http://158.130.109.188:8004")
+```python
+from service_clients.nav_mapping.client import NavMappingClient
+
+client = NavMappingClient()  # default: http://158.130.109.188:8004
 
 # Update map with depth image
 client.update(
