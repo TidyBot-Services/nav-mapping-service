@@ -2,7 +2,7 @@
 TidyBot Nav Mapping Service — Python Client SDK
 
 Usage:
-    from services.nav_mapping.client import NavMappingClient
+    from service_clients.nav_mapping.client import NavMappingClient
 
     client = NavMappingClient()
     client.update(depth_bytes, pose=(x, y, theta), intrinsics=(fx, fy, cx, cy))
