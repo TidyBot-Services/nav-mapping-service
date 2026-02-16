@@ -2,57 +2,71 @@
 TidyBot Nav Mapping Service — Python Client SDK
 
 Usage:
-    from client import NavMappingClient
+    from services.nav_mapping.client import NavMappingClient
 
-    client = NavMappingClient("http://<backend-host>:8004")
-
-    # Check health
-    print(client.health())
-
-    # Update map with depth image
-    client.update("depth.png", pose=(1.0, 2.0, 0.5),
-                  intrinsics=(fx, fy, cx, cy))
-
-    # Get map as PNG bytes
-    png_data = client.get_map(format="png")
-
-    # Plan a path
+    client = NavMappingClient()
+    client.update(depth_bytes, pose=(x, y, theta), intrinsics=(fx, fy, cx, cy))
+    png = client.get_map(format="png")
     path = client.plan(start=(0, 0), goal=(2.0, 3.0))
-
-    # Get exploration frontiers
-    frontiers = client.get_frontiers()
 """
 
 import base64
-import requests
-import numpy as np
+import json
+import urllib.request
+import urllib.error
+import urllib.parse
 from pathlib import Path
 from typing import Optional, Union
+
+import numpy as np
 
 
 class NavMappingClient:
     """Client SDK for the TidyBot Nav Mapping Service."""
 
-    def __init__(self, base_url: str = "http://localhost:8004", timeout: float = 30.0):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, host: str = "http://158.130.109.188:8004", timeout: float = 30.0):
+        self.host = host.rstrip("/")
         self.timeout = timeout
+
+    def _post(self, path: str, payload: dict) -> dict:
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{self.host}{path}", data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            return json.loads(resp.read())
+
+    def _get(self, path: str, params: Optional[dict] = None):
+        url = f"{self.host}{path}"
+        if params:
+            url += "?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            ct = resp.headers.get("Content-Type", "")
+            raw = resp.read()
+            if "application/json" in ct:
+                return json.loads(raw)
+            return raw  # binary (e.g. PNG)
 
     def health(self) -> dict:
         """Check service health."""
-        r = requests.get(f"{self.base_url}/health", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
+        return self._get("/health")
 
-    def _encode_depth(self, image) -> str:
-        """Encode depth image to base64 PNG."""
-        if isinstance(image, (str, Path)):
-            return base64.b64encode(Path(image).read_bytes()).decode()
-        elif isinstance(image, bytes):
-            return base64.b64encode(image).decode()
-        elif isinstance(image, np.ndarray):
+    @staticmethod
+    def _encode_depth(image) -> str:
+        """Encode depth image to base64."""
+        if isinstance(image, np.ndarray):
             import cv2
             _, buf = cv2.imencode(".png", image)
             return base64.b64encode(buf.tobytes()).decode()
+        elif isinstance(image, (str, Path)):
+            p = Path(image)
+            if p.exists():
+                return base64.b64encode(p.read_bytes()).decode()
+            return image
+        elif isinstance(image, bytes):
+            return base64.b64encode(image).decode()
         return image
 
     def update(
@@ -72,7 +86,7 @@ class NavMappingClient:
             max_range: Maximum depth range in meters.
 
         Returns:
-            dict with update status and timing.
+            Dict with update status and timing.
         """
         payload = {
             "depth_image": self._encode_depth(depth_image),
@@ -81,9 +95,7 @@ class NavMappingClient:
                           "cx": intrinsics[2], "cy": intrinsics[3]},
             "max_range": max_range,
         }
-        r = requests.post(f"{self.base_url}/update", json=payload, timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
+        return self._post("/update", payload)
 
     def get_map(self, format: str = "png") -> Union[bytes, dict]:
         """
@@ -92,11 +104,7 @@ class NavMappingClient:
         Args:
             format: 'png' (returns bytes), 'json' (returns dict with grid), or 'info' (returns stats).
         """
-        r = requests.get(f"{self.base_url}/map", params={"format": format}, timeout=self.timeout)
-        r.raise_for_status()
-        if format == "png":
-            return r.content
-        return r.json()
+        return self._get("/map", params={"format": format})
 
     def plan(
         self,
@@ -120,26 +128,15 @@ class NavMappingClient:
             "goal": list(goal),
             "use_inflation": use_inflation,
         }
-        r = requests.post(f"{self.base_url}/plan", json=payload, timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
+        return self._post("/plan", payload)
 
     def get_frontiers(self) -> dict:
-        """
-        Get frontier cells for exploration.
-
-        Returns:
-            dict with frontiers list, count, and detection_ms.
-        """
-        r = requests.get(f"{self.base_url}/frontiers", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
+        """Get frontier cells for exploration."""
+        return self._get("/frontiers")
 
     def reset(self) -> dict:
         """Reset the occupancy grid."""
-        r = requests.post(f"{self.base_url}/reset", timeout=self.timeout)
-        r.raise_for_status()
-        return r.json()
+        return self._post("/reset", {})
 
 
 if __name__ == "__main__":
