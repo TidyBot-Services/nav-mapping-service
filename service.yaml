@@ -1,0 +1,14 @@
+name: nav-mapping-service
+version: 0.1.0
+description: Occupancy grid mapping with A* path planning and frontier detection for robot navigation
+
+requires:
+  gpu: false
+
+deploy:
+  image: tidybot/nav-mapping-service:0.1.0
+  port: 8004
+  health: /health
+  ready_timeout: 120
+
+client: client.py
