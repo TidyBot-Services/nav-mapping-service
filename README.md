@@ -31,7 +31,7 @@ python main.py  # starts on port 8004
 No `requests` dependency — the client uses Python stdlib (`urllib`). Only `numpy` is needed for map arrays.
 
 ```python
-from service_clients.nav_mapping.client import NavMappingClient
+from client import NavMappingClient  # client.py lives in this repo
 
 client = NavMappingClient()  # default: http://158.130.109.188:8004
 
